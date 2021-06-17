@@ -16,7 +16,11 @@ req = requests.get(url)
 url_content = req.content
 
 #adds timstamp to name, and directs to the right file
-with open(f'starlink_TLEdata-{d1}.txt', 'wb') as txt_file:
+save_path = 'C:\\Users\\rasta\\Documents\\TLEs'
+save_file = f'starlink_TLEdata-{d1}.txt'
+completeName = os.path.join(save_path, file_name)
+with open(completeName, 'wb') as txt_file:
+
     txt_file.write(url_content)
 
     # txt_file = open('starlink_TLEdata.txt', 'wb')
