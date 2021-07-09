@@ -5,32 +5,42 @@
 import math
 import numpy as np
 import scipy.io
+from scipy import special
 from numpy.linalg import matrix_power
 
-##first section, Example inputs
+
+#constants, may be repplaced with orekit
+
+# considering arrays for conversion of matricies
+
 #gps time, to start?
-t_gps = 0
-recef = [6778137, 0, 0] #(m)
-vecef = [0,0,7300] #(m/2)
+t_gps = np.array([0])
+recef = np.zeros((1,3))
+recef[0,0] = 6778137
+# recef = np.array([6778137, 0, 0]) #(m), if this becomes 3D(?) will have to redo ecef_llh
+vecef = np.array([0,0,7300]) #(m/2)
 #MSIS placeholder
-Nmsis = [.5,.95,0,0,0,0] #Number Densities (or ratio to total number density) of He, O, N2, O2, AR, H, N
+Nmsis = np.array([.5,.95,0,0,0,0,0]) #Number Densities (or ratio to total number density) of He, O, N2, O2, AR, H, N
 Tmsis = 700 #temp at altitude (K)
 Dmsis = 1e-12 #nuetral mass denisty (kg/m^3)
+alpha = .93
 
 #Vector pointing from satellite to sun (this should be obtainable from Orekit, and in ECEF coords)
 #but for now,
 # approx. solar vector at 1 AU sun-earth distance and around Dec. solstice, at midnight UT
 sun_deg = -23.45
 sdeg1 = math.radians(sun_deg)
-sdeg_array = np.array([-math.cos(sdeg1),0,math.sin(sdeg1)])
+sdeg_array = np.zeros((1,3))
+sdeg_array[0,0] = -math.cos(sdeg1)
+sdeg_array[0,2] = math.sin(sdeg1)
+# sdeg_array = np.array([-math.cos(sdeg1),0,math.sin(sdeg1)])
 
 sunVector_ecef = 149597870700*sdeg_array - recef
 #need to fix above # fixed
 
-##second section, Define constants
-alpha = 0.93; # Sentman model's accommodation coefficient
 
-#getarenrm function
+#getareanrm function
+
 def getareanrm():
     #data file with macromodel plate areas (m^2) and plate normal vectors in spacecraft body-fixed coordinates data refers to             #Starlink v1.0 and body-fixed coordinate system as shown in Starlink_geometry_20200331.jpg reflectivities and materials are           #guesses for now, satellite bus is assumed completely flat... need to revisit this at some point
     Au = 196.96655
@@ -94,13 +104,14 @@ def getareanrm():
 
     return  [nrm_sbf,A,plt_M,bwspec,bwdiff]
 
-##third section, Read Satellite geometry and properties
+    #finished, should be good for script, works for following cell
+
+    #substitute for struct in matlab
 satprop = []
 
 [nrm_sbf,area,plt_M,bwspec,bwdiff] = getareanrm()
 scmass = 260 #Starlink v1.0 mass (kg) this is from wikipedia(!)
 
-#according to Eric, may or may not need satprop
 satprop.append(nrm_sbf)
 satprop.append(area)
 satprop.append(plt_M)
@@ -112,9 +123,8 @@ satprop.append(scmass)
 att_model = scipy.io.loadmat('attitude_model.mat')
 att_model.keys()
 mean_slonsbf = att_model['mean_slonsbf']
-# mean_slonsbf[30,30]
+
 mean_ssada = att_model['mean_ssada']
-# mean_ssada[30,30]
 
 #2nd function ecef_llh
 
@@ -149,8 +159,8 @@ def ecef_llh(r_ecef,converge):
 
     return[lat,lon,height]
 
-#setup attitude model
 [lat,lon,height] = ecef_llh(1e-3*recef,1e-12)
+
 # print(lat,lon,height)
 #seems to work good, reasonable answer
 latbin=[]
@@ -167,23 +177,15 @@ sltbin = np.digitize(slt,sltedges)
 # slt_s = np.digitize(slt,sltedges)
 
 latbin.append(lat_s)
-# sltbin.append(slt_s)
 
-
-print(sltbin)
-
-#should be good, not sure if it works with multiple timesteps yet
-
-#allocate variables
+# allocate variables
 
 ecef2sbf = np.zeros((3,3,len(t_gps)))
 vrel2sbf = np.zeros((3,len(t_gps)))
 vrel_sbf = np.zeros((3,len(t_gps)))
 Cd = np.zeros((1,len(t_gps)))
 Aref = np.zeros((1,len(t_gps)))
-# print(Cd, Aref)
 
-#attitude_model_rotmat function
 def attitude_model_rotmat(recef,sunVector_ecef,solar_lon_sbf):
     # %   Calculates the ECEF=>SBF rotation matrix based on
     # % recef (position in ECEF coordinates), sunVector_ECEF 
@@ -203,42 +205,19 @@ def attitude_model_rotmat(recef,sunVector_ecef,solar_lon_sbf):
     # tsbf[:,1] = np.cross(tsbf[:,1],[cosd(solar_lon_sbf(1)),sind(solar_lon_sbf(1)),0]) #% t2 = perpendicular to t1 and sunVector
     # tsbf[:,1] = np.cross(tsbf[:,0],[math.cos(math.radians(solar_lon_sbf(1))),math.sin(math.radians(solar_lon_sbf(1))),0])
     tsbf[:,1] = np.cross(tsbf[:,0],[math.cos(math.radians(solar_lon_sbf)),math.sin(math.radians(solar_lon_sbf)),0])
-    tsbf[:,1] = tsbf[:,1]/math.sqrt(sum(tsbf[:,1]**2,1)) # normalize
+    tsbf[:,1] = tsbf[:,1]/math.sqrt(sum(tsbf[:,1]**2,0)) # normalize
     tsbf[:,2] = np.cross(tsbf[:,0],tsbf[:,1]) #% t3 = completes the right-hand coordinate
 
     # tecef = np.zeros((3,3))
     # rec = recef[0]
-    tecef[:,0] = recef[:,0]/math.sqrt(sum(recef[:,0]**2,1)) #% t1 = zenith
-    tecef[:,1] = np.cross(tecef[:,1],sunVector_ecef[0,:]) #% t2 = perpendicular to t1 and sunVector
+    tecef[:,0] = recef[0]/math.sqrt(sum(recef[:,0]**2,1)) #% t1 = zenith
+    tecef[:,1] = np.cross(tecef[:,0],sunVector_ecef[0,:]) #% t2 = perpendicular to t1 and sunVector
     tecef[:,1] = tecef[:,1]/math.sqrt(sum(tecef[:,1]**2,1)) # normalize
     tecef[:,2] = np.cross(tecef[:,0],tecef[:,1]) #% t3 = completes the right-hand coordinate
 
-    ecef2sbf = tsbf*(np.conj(tecef))
+    ecef2sbf = tsbf@(np.conj(tecef))
     
-    return [ecef2sbf]
-
-
-#this was the testing area for the function parts
-
-tsbf = np.zeros((3,3))
-tsbf[:,0] = [0,0,-1]
-assis = np.cross([0,0-1],[math.cos(math.radians(30)),math.sin(math.radians(6)),0])
-tsbf[:,1] = assis
-tsbf[:,1] = tsbf[:,1]/math.sqrt(sum(tsbf[:,1]**2,1)); # normalize
-tsbf[:,2] = np.cross(tsbf[:,0],tsbf[:,1]) #% t3 = completes the right-hand coordinate
-
-#the tecef[:,1] indexing works fine in this chunk but it appears to be the source of the error in when running the fucntion in the following cell
-
-tsbf = np.zeros((3,3))
-tecef = np.zeros((3,3))
- 
-tecef[:,0] = recef[:,0]/math.sqrt(sum(recef[:,0]**2,1)) #% t1 = zenith
-tecef[:,1] = np.cross(tecef[:,1],sunVector_ecef[0,:]) #% t2 = perpendicular to t1 and sunVector
-tecef[:,1] = tecef[:,1]/math.sqrt(sum(tecef[:,1]**2,1)); # normalize
-tecef[:,2] = np.cross(tecef[:,0],tecef[:,1]) #% t3 = completes the right-hand coordinate
-ecef2sbf = tsbf*(np.conj(tecef))
-kang = math.sqrt(sum(recef[:,0]**2,1))
-# print(vecef)
+    return [ecef2sbf,tsbf,tecef]
 
 
 #SentmanCD_MassSpecies function
@@ -259,22 +238,25 @@ def SentmanCD_MassSpecies(V,Ai,Normi,Ni,Ta,alpha):
     # % Universal Gas Constant
     R = 8314.47215 #% J/(K*kmol)
     # % Atomic Mass of He, O, N2, O2, AR, H, N
-    Mass_list = [4.002602,15.9994,28.0134,31.9988,39.948,1.0079,14.0067] #Make into array
-    Mass = np.array(Mass_list)
+    Mass = [4.002602,15.9994,28.0134,31.9988,39.948,1.0079,14.0067] #Make into array
+    Mass = np.array(Mass)
+    # Mass = map(np.float(Mass))
 
     # % Mean Atomic Mass of Incident Atmosphere
     Ma_ratio = Ni*Mass/sum(Ni*Mass)
     # %Ma = sum(Ni.*Mass)/sum(Ni); % g/mol
     # % Most Probable thermal velocity of Incident Atmospheric Molecules
-    vp = math.sqrt( 2*R*Ta/Mass )
+    vp = np.sqrt( 2*R*Ta/Mass )
 
     Tw = 300 #% Kelvin (Guessing)
 
     Vi    = math.sqrt( sum( V**2 ) )
-    Ti    = Mass@(matrix_power(Vi,2)/(3@R))
-    s1    = Vi/vp #% speed ratio: satellite speed to most probable thermal speed of ambient molecules
-    Q     = 1 + 1/(2@s1**2)
-    Vr = math.sqrt(2/3)@Vi@math.sqrt(1 + alpha@(Tw/Ti - 1))
+    # Ti    = Mass@(matrix_power(Vi,2)/(3@R))
+    # Ti    = np.multiply(Mass,(matrix_power(Vi,2)/(3*R)))
+    Ti    = np.multiply(Mass,((Vi**2)/(3*R)))
+    S1    = Vi/vp #% speed ratio: satellite speed to most probable thermal speed of ambient molecules
+    Q     = 1 + 1/(2*S1**2)
+    Vr = np.sqrt(2/3)*Vi*np.sqrt(1 + alpha*(Tw/Ti - 1))
 
     # % Pre-allocate memory
     PSIi = 0
@@ -285,19 +267,20 @@ def SentmanCD_MassSpecies(V,Ai,Normi,Ni,Ta,alpha):
         gamma = np.dot(V,Normi[:,i])/Vi #% It is assumed that |Normi| = 1
 
         if gamma > 0 :
-            Aref = Aref + Ai(i)*gamma
-        else:
-            P = math.exp(-matrix_power(gamma,2)@s1**2) / s1 
-            Z = 1 + math.erf(gamma@s1) 
+            Aref = Aref + Ai[i]*gamma
+    
+        P = np.exp(-(gamma**2)*S1**2) / S1 
+        Z = 1 + special.erf(gamma*S1) 
 
-	        # % Sum the product of CD_i*Aref_i = PSIi
-	        # %     the appropriate coefficient of drag for the entire satellite is:
-	        # %     C_{D} = sum( C_{D,i}*A_{ref,i} ) / sum( A_{ref,i} )
-            PSIi = PSIi + Ai(i)@sum( Ma_ratio*( P/math.sqrt(math.pi) + gamma@Q*Z + (gamma@Vr/(2@Vi))*(gamma@math.sqrt(math.pi)@Z + P) ) )
+	    # % Sum the product of CD_i*Aref_i = PSIi
+	    # %     the appropriate coefficient of drag for the entire satellite is:
+	    # %     C_{D} = sum( C_{D,i}*A_{ref,i} ) / sum( A_{ref,i} )
+        PSIi = PSIi + Ai[i]*sum( Ma_ratio*( P/math.sqrt(math.pi) + gamma*Q*Z + (gamma*Vr/(2*Vi))*(gamma*math.sqrt(math.pi)*Z + P) ) )
 
     C_d = PSIi / Aref; #not sure if done, matrix division is making me unsure...
 
     return [C_d, Aref]
+
 
 # Loop thru example values (here we only have one data point though)
 ecef2sbf = np.zeros((3,3,len(t_gps)))
@@ -305,17 +288,23 @@ sada_pos_interp = np.zeros((1,len(t_gps)))
 
 for j in range(len(t_gps)):
 	# % Lookup attitude model to calculate ECEF->SBF rotation matrix when quaternion interpolation is unreliable
-	[ecef2sbf[:,:,j-1]] = attitude_model_rotmat(recef,sunVector_ecef,mean_slonsbf[sltbin[j-1],latbin[j-1]])
+	[ecef2sbf[:,:,j-1],tsbf,tecef] = attitude_model_rotmat(recef,sunVector_ecef,mean_slonsbf[sltbin[j-1]-1,latbin[j-1]-1])
+	#perfect, 100% accurate to matlab
 
-	sada_pos_interp[j] = mean_ssada[sltbin[j],latbin[j]]
+	sada_pos_interp[j] = mean_ssada[sltbin[j]-1,latbin[j]-1]
 
 	# % Calculate velocity of satellite relative to atmosphere (ignoring winds but including co-rotation) in SBF coords
 	# boof = ecef2sbf[:,:,j-1]*vecef[:,j-1]
 	aa = ecef2sbf[:,:,j-1]
 	cc = vecef
 	# vrel_sbf[:,j-1] = ecef2sbf[:,:,j-1]*vecef
-	vrel_sbf[:,j-1] = np.matmul(ecef2sbf[:,:,j-1],vecef)
+	vrel_sbf[:,j-1] = np.matmul(ecef2sbf[:,:,j-1],vecef) #correct
 	
+	Normi = np.zeros((3,6))
+	Normi[:,0] = ([0,-math.cos(sada_pos_interp[j-1]),-math.sin(sada_pos_interp[j-1])])
+	Normi[:,1] = ([0,math.cos(sada_pos_interp[j-1]),math.sin(sada_pos_interp[j-1])])
+	Normi[:,[2,3,4,5]] = nrm_sbf[:,[2,3,4,5]]
+	# Normi is right 
 
 
     # % Orient solar panel based on sada_pod angle (in radians)
@@ -323,10 +312,15 @@ for j in range(len(t_gps)):
 	# %satprop.nrm_sbf (:,1) = [ 0; -cos(sada_pos_interp(j)); -sin(sada_pos_interp(j))]; % solar panels
 	# %satprop.nrm_sbf (:,2) = [ 0;  cos(sada_pos_interp(j));  sin(sada_pos_interp(j))]; % back of solar panels
 
-	# [Cd(j),Aref(j)] = SentmanCD_MassSpecies(vrel_sbf(:,j),satprop.area,[[0;-cos(sada_pos_interp(j));-sin(sada_pos_interp(j))],[0;cos(sada_pos_interp(j));sin(sada_pos_interp(j))],satprop.nrm_sbf(:,3:end)],Nmsis(:,j),Tmsis(j),alpha)
+
+	[Cd,Aref] = SentmanCD_MassSpecies(vrel_sbf[:,j-1],area,Normi,Nmsis,Tmsis,alpha)
 
 
-# print(vrel_sbf[:,j-1])
+print(Cd)
 
+# Calculate Drag
 
+drag_ecef = -0.5*(Cd*Aref/scmass)*Dmsis*np.sqrt(sum(vecef**2,1))*vecef #% drag acceleration in ECEF coordinates (m/s)
+drag_sbf = -0.5*(Cd*Aref/scmass)*Dmsis*np.sqrt(sum(vrel_sbf**2,1))*vrel_sbf #% drag acceleration in SBF coordinates (m/s)
 
+print(drag_sbf)
